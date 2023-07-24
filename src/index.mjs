@@ -5,6 +5,7 @@ import omit from 'omit';
 import fs from 'fs';
 import assert from 'assert';
 import { execSync } from 'child_process';
+import tmp from 'tmp';
 
 // Apply a function to each string value in an object.
 // Recurse over arrays and objects.
@@ -132,17 +133,39 @@ export default new Transformer({
       const reader = getReader({ options, type: asset.type });
       const writer = getWriter({ options, type: asset.type });
 
-      // Determine dependencies.
-      addAssetDependencies({ asset, options, logger })
-
       // Run Pandoc.
       const input = await asset.getCode();
-      const renderedOptions = renderOptions({ ...omit(['from', 'to', 'read', 'write'], options), from: reader, to: writer });
-      const command = ['pandoc', ...renderedOptions].join(' ');
-      logger.verbose({ message: `Running '${command}'` });
-      const output = await execSync(command, { input, cwd: config.root, encoding: 'utf-8' });
-      logger.verbose({ message: `Done` });
-      asset.setCode(output);
+      tmp.file({ prefix: 'pandoc', postfix: '.json' },
+        async (err, log, fd, cleanupCallback) => {
+          if (err) throw err;
+
+          // Run Pandoc.
+          const renderedOptions = renderOptions({ ...omit(['from', 'to', 'read', 'write'], options), from: reader, to: writer, log: log });
+          const command = ['pandoc', ...renderedOptions].join(' ');
+          logger.verbose({ message: `Running '${command}'` });
+          const output = await execSync(command, { input, cwd: config.root, encoding: 'utf-8' });
+          logger.verbose({ message: `Done` });
+          asset.setCode(output);
+
+          // Add dependencies.
+          // {
+          // "type": "LoadedResource",
+          // "verbosity": "INFO",
+          // "for": "templates/experimental-jams/page.html",
+          // "from": "templates/experimental-jams/page.html"
+          // }
+          const logEntries = JSON.parse(fs.readFile(log));
+          if (Array.isArray(logEntries)) {
+            for (const logEntry of logEntries) {
+              if (logEntry.type === 'LoadedResource') {
+                asset.invalidateOnFileChange(logEntry.for);
+              }
+            }
+          }
+
+          // Clean up temporary log file.
+          cleanupCallback();
+        });
 
       // Update the asset type based on the writer
       asset.type = getAssetType({ writer });
