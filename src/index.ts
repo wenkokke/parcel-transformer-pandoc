@@ -89,7 +89,7 @@ function getAssetType(writer: string) {
 }
 
 // Render Pandoc CLI options.
-function renderOptions(options: PandocOptions) {
+function renderOptionsForCLI(options: PandocOptions) {
   return Object.entries(options).flatMap(([optionName, optionValue]) => {
     if (typeof optionValue === 'boolean') {
       return [`--${optionName}`]
@@ -148,7 +148,7 @@ export default new Transformer({
       const logFile = tmp.fileSync({ prefix: 'pandoc', postfix: '.json' })
 
       // Run Pandoc.
-      const renderedOptions = renderOptions({
+      const renderedOptions = renderOptionsForCLI({
         ...omit(['from', 'to', 'read', 'write'], options),
         from: reader,
         to: writer,
