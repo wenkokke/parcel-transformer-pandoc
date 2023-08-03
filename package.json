@@ -4,6 +4,7 @@
   "license": "GPL3",
   "main": "lib/index.js",
   "scripts": {
+    "prepublish": "npm run build",
     "build": "esbuild src/index.mjs --bundle --platform=node --outdir=lib"
   },
   "dependencies": {
