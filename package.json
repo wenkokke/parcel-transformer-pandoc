@@ -8,7 +8,6 @@
     "build": "esbuild src/index.mjs --bundle --platform=node --outdir=lib"
   },
   "dependencies": {
-    "@parcel/diagnostic": "^2.9.3",
     "@parcel/plugin": "^2.9.3",
     "minimatch": "^9.0.3",
     "omit": "^1.0.1",
