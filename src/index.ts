@@ -88,17 +88,6 @@ function getAssetType(writer: string) {
   }
 }
 
-// Get dependencies.
-function addAssetDependencies(asset: MutableAsset, options: PandocOptions) {
-  return mapValues((filePath) => {
-    if (fs.existsSync(filePath)) {
-      assert(typeof filePath === 'string')
-      asset.invalidateOnFileChange(filePath)
-    }
-    return filePath
-  }, options)
-}
-
 // Render Pandoc CLI options.
 function renderOptions(options: PandocOptions) {
   return Object.entries(options).flatMap(([optionName, optionValue]) => {
