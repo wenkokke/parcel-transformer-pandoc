@@ -6,7 +6,8 @@
   "scripts": {
     "prepublish": "npm run check && npm run build",
     "check": "tsc",
-    "build": "esbuild src/index.ts --bundle --platform=node --outdir=lib"
+    "build": "esbuild src/index.ts --bundle --platform=node --outdir=lib",
+    "bump": "pipx run bumpver update"
   },
   "dependencies": {
     "@parcel/diagnostic": "^2.9.3",
