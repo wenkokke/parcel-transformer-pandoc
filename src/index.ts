@@ -83,6 +83,8 @@ function getWriter(options: PandocOptions) {
 function getAssetType(writer: string) {
   if (writer.match(/commonmark|gfm|markdown/)) {
     return 'md'
+  } else if (writer.match(/latex/)) {
+    return 'tex'
   } else {
     return writer
   }
