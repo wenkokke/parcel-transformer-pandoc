@@ -1,6 +1,5 @@
 import { Transformer } from '@parcel/plugin'
 import ThrowableDiagnostic from '@parcel/diagnostic'
-import type { MutableAsset } from '@parcel/types'
 import { minimatch } from 'minimatch'
 import type { MinimatchOptions } from 'minimatch'
 import path from 'path'
@@ -137,39 +136,53 @@ export default new Transformer({
       })
     }
   },
-  async transform({ asset, config, logger }) {
+  async transform({ asset, config, logger, options }) {
     // Determine the Pandoc CLI options.
-    const sequentialOptions = getOptions(asset.filePath, config)
+    const optionsPerStage = getOptions(asset.filePath, config)
 
     // Run Pandoc with each set of options.
-    for (const options of sequentialOptions) {
+    for (const optionsForCurrentStage of optionsPerStage) {
       // Determine the Pandoc reader & writer:
-      const reader = getReader(options, asset.type)
-      const writer = getWriter(options)
+      const reader = getReader(optionsForCurrentStage, asset.type)
+      const writer = getWriter(optionsForCurrentStage)
+
+      // Get asset contents:
+      const assetContents = await asset.getCode()
+
+      // Get cache directory:
+      const pluginCacheDir = path.relative(
+        process.cwd(),
+        path.join(options.cacheDir, 'parcel-transformer-pandoc'),
+      )
+      fs.mkdirSync(pluginCacheDir, {
+        recursive: true,
+      })
+      const tmpDir = tmp.dirSync({
+        tmpdir: pluginCacheDir,
+      })
+      const logFilePandoc = path.relative(
+        process.cwd(),
+        path.join(tmpDir.name, 'pandoc.log'),
+      )
+      const logFileIncludeFiles = path.relative(
+        process.cwd(),
+        path.join(tmpDir.name, 'include-files.log'),
+      )
 
       // Run Pandoc.
-      const input = await asset.getCode()
-      const logFile = tmp.fileSync({ prefix: 'pandoc', postfix: '.json' })
-
-      // Add log file for include-files filter:
-      const logFileIncludedFiles = tmp.fileSync({
-        prefix: 'included-files',
-        postfix: '.log',
-      })
-      if (!Array.isArray(options.metadata)) options.metadata = []
-      options.metadata.push(`include-log-file=${logFileIncludedFiles.name}`)
-
-      // Run Pandoc.
-      const renderedOptions = renderOptionsForCLI({
-        ...omit(['from', 'to', 'read', 'write'], options),
-        from: reader,
-        to: writer,
-        log: logFile.name,
-      })
-      const command = ['pandoc', ...renderedOptions].join(' ')
+      const command = [
+        'pandoc',
+        ...renderOptionsForCLI(
+          omit(['from', 'to', 'read', 'write'], optionsForCurrentStage),
+        ),
+        `--read=${reader}`,
+        `--write=${writer}`,
+        `--log=${logFilePandoc}`,
+        `-M include-files-log=${logFileIncludeFiles}`,
+      ].join(' ')
       logger.verbose({ message: `Running '${command}'` })
       const output = execSync(command, {
-        input,
+        input: assetContents,
         cwd: config.root,
         encoding: 'utf-8',
       })
@@ -183,27 +196,47 @@ export default new Transformer({
       // "for": "templates/experimental-jams/page.html",
       // "from": "templates/experimental-jams/page.html"
       // }
-      const logEntries = JSON.parse(
-        fs.readFileSync(logFile.name, { encoding: 'utf8' }),
-      )
-      if (Array.isArray(logEntries)) {
-        for (const logEntry of logEntries) {
-          if (
-            typeof logEntry === 'object' &&
-            logEntry.type === 'LoadedResource'
-          ) {
-            asset.invalidateOnFileChange(logEntry.from)
-          }
-        }
-      }
-      if (fs.existsSync(logFileIncludedFiles.name)) {
-        const includedFiles = fs.readFileSync(logFileIncludedFiles.name, {
+      if (
+        fs.existsSync(logFilePandoc) &&
+        fs.lstatSync(logFilePandoc).isFile()
+      ) {
+        const logContents = fs.readFileSync(logFilePandoc, {
           encoding: 'utf8',
         })
-        for (const includedFile of includedFiles.split(/\n+/)) {
-          asset.invalidateOnFileChange(includedFile.trim())
+        const logEntries = JSON.parse(logContents)
+        if (Array.isArray(logEntries)) {
+          for (const logEntry of logEntries) {
+            if (
+              typeof logEntry === 'object' &&
+              logEntry.type === 'LoadedResource'
+            ) {
+              asset.invalidateOnFileChange(logEntry.from)
+            }
+          }
         }
+        fs.rmSync(logFilePandoc)
       }
+      if (
+        fs.existsSync(logFileIncludeFiles) &&
+        fs.lstatSync(logFileIncludeFiles).isFile()
+      ) {
+        const logContents = fs.readFileSync(logFileIncludeFiles, {
+          encoding: 'utf8',
+        })
+        const logEntries = logContents.split(/\n+/)
+        for (const logEntry of logEntries) {
+          const dependencyPath = logEntry.trim()
+          if (
+            dependencyPath !== '' &&
+            fs.existsSync(dependencyPath) &&
+            fs.lstatSync(dependencyPath).isFile()
+          ) {
+            asset.invalidateOnFileChange(dependencyPath)
+          }
+        }
+        fs.rmSync(logFileIncludeFiles)
+      }
+      tmpDir.removeCallback()
 
       // Update the asset type based on the writer
       asset.type = getAssetType(writer)
