@@ -62,6 +62,8 @@ function getReader(options: PandocOptions, type: string) {
     switch (type) {
       case 'md':
         return 'markdown'
+      case 'tex':
+        return 'latex'
       default:
         return type
     }
