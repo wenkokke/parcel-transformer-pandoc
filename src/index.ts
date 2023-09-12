@@ -156,8 +156,8 @@ export default new Transformer({
         prefix: 'included-files',
         postfix: '.log',
       })
-      if (typeof options.metadata !== 'object') options.metadata = {}
-      options.metadata['include-log-file'] = logFileIncludedFiles.name
+      if (!Array.isArray(options.metadata)) options.metadata = []
+      options.metadata.push(`include-log-file=${logFileIncludedFiles.name}`)
 
       // Run Pandoc.
       const renderedOptions = renderOptionsForCLI({
