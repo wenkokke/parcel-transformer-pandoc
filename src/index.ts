@@ -143,13 +143,21 @@ export default new Transformer({
 
     // Run Pandoc with each set of options.
     for (const options of sequentialOptions) {
-      // Determine the Pandoc reader & writer.
+      // Determine the Pandoc reader & writer:
       const reader = getReader(options, asset.type)
       const writer = getWriter(options)
 
       // Run Pandoc.
       const input = await asset.getCode()
       const logFile = tmp.fileSync({ prefix: 'pandoc', postfix: '.json' })
+
+      // Add log file for include-files filter:
+      const logFileIncludedFiles = tmp.fileSync({
+        prefix: 'included-files',
+        postfix: '.log',
+      })
+      if (typeof options.metadata !== 'object') options.metadata = {}
+      options.metadata['include-log-file'] = logFileIncludedFiles.name
 
       // Run Pandoc.
       const renderedOptions = renderOptionsForCLI({
@@ -186,6 +194,14 @@ export default new Transformer({
           ) {
             asset.invalidateOnFileChange(logEntry.from)
           }
+        }
+      }
+      if (fs.existsSync(logFileIncludedFiles.name)) {
+        const includedFiles = fs.readFileSync(logFileIncludedFiles.name, {
+          encoding: 'utf8',
+        })
+        for (const includedFile of includedFiles.split(/\n+/)) {
+          asset.invalidateOnFileChange(includedFile.trim())
         }
       }
 
